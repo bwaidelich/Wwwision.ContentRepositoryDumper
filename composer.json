@@ -1,0 +1,22 @@
+{
+    "description": "CLI commands to dump and compare Neos Content Repositories",
+    "type": "neos-package",
+    "name": "wwwision/contentrepositorydumper",
+    "require": {
+        "ext-intl": "*",
+        "neos/content-repository": "^7"
+    },
+    "require-dev": {
+        "roave/security-advisories": "dev-latest"
+    },
+    "autoload": {
+        "psr-4": {
+            "Wwwision\\ContentRepositoryDumper\\": "Classes/"
+        }
+    },
+    "extra": {
+        "neos": {
+            "package-key": "Wwwision.ContentRepositoryDumper"
+        }
+    }
+}
