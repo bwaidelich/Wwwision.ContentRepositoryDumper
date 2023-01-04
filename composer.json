@@ -2,6 +2,7 @@
     "description": "CLI commands to dump and compare Neos Content Repositories",
     "type": "neos-package",
     "name": "wwwision/contentrepositorydumper",
+    "license": "MIT",
     "require": {
         "ext-intl": "*",
         "neos/content-repository": "^9"
@@ -14,6 +15,16 @@
             "Wwwision\\ContentRepositoryDumper\\": "Classes/"
         }
     },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/bwaidelich"
+        },
+        {
+            "type": "paypal",
+            "url": "https://www.paypal.me/bwaidelich"
+        }
+    ],
     "extra": {
         "neos": {
             "package-key": "Wwwision.ContentRepositoryDumper"
