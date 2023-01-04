@@ -2,11 +2,22 @@
 declare(strict_types=1);
 namespace Wwwision\ContentRepositoryDumper;
 
-use Neos\ContentRepository\Domain\Projection\Content\TraversableNodeInterface;
-use Neos\ContentRepository\Domain\Service\ContentDimensionCombinator;
-use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
+use Neos\ContentRepository\Core\ContentRepository;
+use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\Factory\ContentRepositoryId;
+use Neos\ContentRepository\Core\NodeType\NodeTypeName;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
+use Neos\ContentRepository\Core\Projection\ContentGraph\NodeAggregate;
+use Neos\ContentRepository\Core\Projection\ContentGraph\NodePath;
+use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
+use Neos\ContentRepository\Core\Projection\Workspace\Workspace;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
+use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\Model\Site;
+use Wwwision\ContentRepositoryCompare\Model\ExportedNode;
 use Wwwision\ContentRepositoryDumper\Model\ContentDimensionCoordinates;
 use Wwwision\ContentRepositoryDumper\Model\DumpedNode;
 use Wwwision\ContentRepositoryDumper\Model\DumpedNodes;
@@ -18,8 +29,7 @@ final class Exporter
 {
 
     public function __construct(
-        private readonly ContextFactoryInterface $contextFactory,
-        private readonly ContentDimensionCombinator $contentDimensionCombinator,
+        private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
     ) {}
 
     /**
@@ -29,34 +39,45 @@ final class Exporter
      */
     public function __invoke(Site $site, Options $options): \Generator
     {
-        foreach ($this->contentDimensionCombinator->getAllAllowedCombinations() as $combination) {
-            $coordinates = new ContentDimensionCoordinates(array_map(static fn ($value) => is_array($value) ? $value[0] : $value, $combination));
+        $contentRepositoryIdentifier = ContentRepositoryId::fromString($site->getConfiguration()['contentRepository'] ?? throw new \RuntimeException('There is no content repository identifier configured in Sites configuration in Settings.yaml: Neos.Neos.sites.*.contentRepository', 1672831790));
+        $contentRepository = $this->contentRepositoryRegistry->get($contentRepositoryIdentifier);
+        $liveWorkspace = $contentRepository->getWorkspaceFinder()->findOneByName(WorkspaceName::forLive());
+        if ($liveWorkspace === null) {
+            throw new \InvalidArgumentException(sprintf('Failed to find live workspace for Content Repository "%s"', $contentRepositoryIdentifier->value));
+        }
+        try {
+            $sitesNode = $contentRepository->getContentGraph()->findRootNodeAggregateByType($liveWorkspace->currentContentStreamId, NodeTypeName::fromString('Neos.Neos:Sites'));
+        } catch (\Exception $e) {
+            throw new \InvalidArgumentException(sprintf('Failed to find sites root node for Content Repository "%s" and content stream "%s"', $contentRepositoryIdentifier->value, $liveWorkspace->currentContentStreamId->getValue()), 1667236125, $e);
+        }
+
+        /** @var DimensionSpacePoint $dimensionSpacePoint */
+        foreach ($contentRepository->getVariationGraph()->getDimensionSpacePoints() as $dimensionSpacePoint) {
+            $coordinates = new ContentDimensionCoordinates($dimensionSpacePoint->coordinates);
             if (!$options->dimensionFilter->matchesContentDimension($coordinates)) {
                 continue;
             }
-            yield new DumpedNodesForCoordinates($coordinates, $this->exportSite($site, $combination));
-
+            yield new DumpedNodesForCoordinates($coordinates, $this->exportSite($site, $contentRepository, $liveWorkspace, $dimensionSpacePoint, $sitesNode));
         }
     }
 
-    private function exportSite(Site $site, array $dimensions): DumpedNodes
+    private function exportSite(Site $site, ContentRepository $contentRepository, Workspace $liveWorkspace, DimensionSpacePoint $dimensionSpacePoint, NodeAggregate $sitesNode): DumpedNodes
     {
-        $context = $this->contextFactory->create([
-            'currentSite' => $site,
-            'dimensions' => $dimensions,
-        ]);
-        $siteNode = $context->getNode('/sites/' . $site->getNodeName());
-        if (!$siteNode instanceof TraversableNodeInterface) {
-            throw new \RuntimeException(sprintf('Failed to find site node for site name "%s" in dimension %s', $site->getNodeName(), json_encode($dimensions)));
+        $contentSubGraph = $contentRepository->getContentGraph()->getSubgraph($liveWorkspace->currentContentStreamId, $dimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
+
+        $siteNodePath = NodePath::fromString($site->getNodeName()->value);
+        $siteNode = $contentSubGraph->findNodeByPath($siteNodePath, $sitesNode->nodeAggregateId);
+        if ($siteNode === null) {
+            throw new \RuntimeException(sprintf('Failed to find site node with path "%s" underneath "%s"', $siteNodePath->jsonSerialize(), $sitesNode->nodeAggregateId->getValue()), 1667814855);
         }
-        return new DumpedNodes($this->exportNodes($siteNode, 0));
+        return new DumpedNodes($this->exportNodes($contentSubGraph, $siteNode, 0));
     }
 
-    private function exportNodes(TraversableNodeInterface $node, int $level): \Generator
+    private function exportNodes(ContentSubgraphInterface $contentSubGraph, Node $node, int $level): \Generator
     {
-        yield new DumpedNode((string)$node->getNodeAggregateIdentifier(), (string)$node->getNodeName(), $level);
-        foreach ($node->findChildNodes() as $childNode) {
-            yield from $this->exportNodes($childNode, $level + 1);
+        yield new DumpedNode($node->nodeAggregateId->getValue(), $node->nodeName->jsonSerialize(), $level);
+        foreach ($contentSubGraph->findChildNodes($node->nodeAggregateId, FindChildNodesFilter::all()) as $childNode) {
+            yield from $this->exportNodes($contentSubGraph, $childNode, $level + 1);
         }
     }
 
