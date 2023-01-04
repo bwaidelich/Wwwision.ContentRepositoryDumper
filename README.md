@@ -1,12 +1,16 @@
 # Wwwision.ContentRepositoryDumper
 
-CLI commands to dump and compare Neos Content Repositories
+CLI commands to dump and compare [Neos Content Repository](https://github.com/neos/content-repository) instances
 
 ## Installation
 
 Install via composer:
 
     composer require wwwision/contentrepositorydumper
+
+**Note:** There are currently **two different versions** of this package:
+* The 7.x-releases are compatible with the Neos Content Repository version 7.x and 8.x+
+* The 9.x-releases are compatible with the Neos Content Repository version 9.x
 
 ## Usage
 
