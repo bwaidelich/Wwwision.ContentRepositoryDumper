@@ -5,6 +5,7 @@ namespace Wwwision\ContentRepositoryDumper\Command;
 use Neos\Flow\Cli\CommandController;
 use Neos\Neos\Domain\Repository\SiteRepository;
 use Neos\Utility\Files;
+use SebastianBergmann\Diff\Differ;
 use Wwwision\ContentRepositoryDumper\Exporter;
 use Wwwision\ContentRepositoryDumper\Model\ContentDimensionCoordinates;
 use Wwwision\ContentRepositoryDumper\Model\ContentDimensionFilter;
@@ -63,6 +64,42 @@ final class CrCommandController extends CommandController
         $this->output->progressFinish();
         $this->outputLine();
         $this->outputLine('<success>Dumped Content Repository to %d file%s at "%s"</success>', [$filesCount, $filesCount !== 1 ? 's' : '', $path]);
+    }
+
+    /**
+     * Compares the files created by a previous "cr:dump" call
+     *
+     * @param string $path1 Absolute path to the dumped files of the first installation (e.g. ".../Data/ContentRepositoryDump/1672995687")
+     * @param string $path2 Absolute path to the dumped files of the second installation (e.g. ".../Data/ContentRepositoryDump/1672995788")
+     * @param bool $verbose If set the difference between files will be outputted
+     * @return void
+     */
+    public function compareDumpsCommand(string $path1, string $path2, bool $verbose = false): void
+    {
+        $filePaths1 = iterator_to_array(Files::getRecursiveDirectoryGenerator($path1, '.txt'));
+        $filePaths2 = iterator_to_array(Files::getRecursiveDirectoryGenerator($path2, '.txt'));
+
+        $filesOnlyInPath1 = [];
+        foreach ($filePaths1 as $filePath1) {
+            $filename = basename($filePath1);
+            $filePath2 = Files::concatenatePaths([$path2, $filename]);
+            if (!file_exists($filePath2)) {
+                $filesOnlyInPath1[] = $filename;
+                continue;
+            }
+            $this->output(' %s... ', [$filename]);
+            $fileContents1 = file_get_contents($filePath1);
+            $fileContents2 = file_get_contents($filePath2);
+            if ($fileContents1 === $fileContents2) {
+                $this->outputLine('<success>✔</success>');
+                continue;
+            }
+            $this->outputLine('<error>✖</error>');
+            if ($verbose) {
+                $differ = new Differ();
+                $this->outputLine($differ->diff($fileContents1, $fileContents2));
+            }
+        }
     }
 
     /** --------------------------- */
