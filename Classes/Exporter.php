@@ -12,12 +12,12 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\NodeAggregate;
 use Neos\ContentRepository\Core\Projection\ContentGraph\NodePath;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
+use Neos\ContentRepository\Core\Projection\NodeHiddenState\NodeHiddenStateFinder;
 use Neos\ContentRepository\Core\Projection\Workspace\Workspace;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\Model\Site;
-use Wwwision\ContentRepositoryCompare\Model\ExportedNode;
 use Wwwision\ContentRepositoryDumper\Model\ContentDimensionCoordinates;
 use Wwwision\ContentRepositoryDumper\Model\DumpedNode;
 use Wwwision\ContentRepositoryDumper\Model\DumpedNodes;
@@ -64,20 +64,22 @@ final class Exporter
     private function exportSite(Site $site, ContentRepository $contentRepository, Workspace $liveWorkspace, DimensionSpacePoint $dimensionSpacePoint, NodeAggregate $sitesNode): DumpedNodes
     {
         $contentSubGraph = $contentRepository->getContentGraph()->getSubgraph($liveWorkspace->currentContentStreamId, $dimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
+        $nodeHiddenStateFinder = $contentRepository->projectionState(NodeHiddenStateFinder::class);
 
         $siteNodePath = NodePath::fromString($site->getNodeName()->value);
         $siteNode = $contentSubGraph->findNodeByPath($siteNodePath, $sitesNode->nodeAggregateId);
         if ($siteNode === null) {
             throw new \RuntimeException(sprintf('Failed to find site node with path "%s" underneath "%s"', $siteNodePath->jsonSerialize(), $sitesNode->nodeAggregateId->getValue()), 1667814855);
         }
-        return new DumpedNodes($this->exportNodes($contentSubGraph, $siteNode, 0));
+        return new DumpedNodes($this->exportNodes($contentSubGraph, $nodeHiddenStateFinder, $siteNode, 0));
     }
 
-    private function exportNodes(ContentSubgraphInterface $contentSubGraph, Node $node, int $level): \Generator
+    private function exportNodes(ContentSubgraphInterface $contentSubGraph, NodeHiddenStateFinder $hiddenStateFinder, Node $node, int $level): \Generator
     {
-        yield new DumpedNode($node->nodeAggregateId->getValue(), $node->nodeName->jsonSerialize(), $level);
+        $hiddenState = $hiddenStateFinder->findHiddenState($node->subgraphIdentity->contentStreamId, $node->subgraphIdentity->dimensionSpacePoint, $node->nodeAggregateId);
+        yield new DumpedNode($node->nodeAggregateId->getValue(), $node->nodeName->jsonSerialize(), $node->classification->isTethered(), $hiddenState->isHidden, $level);
         foreach ($contentSubGraph->findChildNodes($node->nodeAggregateId, FindChildNodesFilter::all()) as $childNode) {
-            yield from $this->exportNodes($contentSubGraph, $childNode, $level + 1);
+            yield from $this->exportNodes($contentSubGraph, $hiddenStateFinder, $childNode, $level + 1);
         }
     }
 
