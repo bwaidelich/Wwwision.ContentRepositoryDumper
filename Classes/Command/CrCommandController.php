@@ -47,7 +47,15 @@ final class CrCommandController extends CommandController
         foreach ($batches as $batch) {
             $filename = Files::concatenatePaths([$path, $this->coordinatesFilename($batch->coordinates)]);
             foreach ($batch->nodes as $node) {
-                file_put_contents($filename, str_repeat(' ', $node->level * 2) . $node->id . ' (' . $node->name . ')' . PHP_EOL, FILE_APPEND);
+                $attributes = [];
+                if ($node->isTethered) {
+                    $attributes[] = 'tethered';
+                }
+                if ($node->isHidden) {
+                    $attributes[] = 'hidden';
+                }
+                $attributesString = $attributes !== [] ? ' [' . implode('|', $attributes) . ']' : '';
+                file_put_contents($filename, str_repeat(' ', $node->level * 2) . $node->id . ' (' . $node->name . ')' . $attributesString . PHP_EOL, FILE_APPEND);
                 $this->output->progressAdvance();
             }
             $filesCount ++;
@@ -55,7 +63,6 @@ final class CrCommandController extends CommandController
         $this->output->progressFinish();
         $this->outputLine();
         $this->outputLine('<success>Dumped Content Repository to %d file%s at "%s"</success>', [$filesCount, $filesCount !== 1 ? 's' : '', $path]);
-
     }
 
     /** --------------------------- */

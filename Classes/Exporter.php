@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace Wwwision\ContentRepositoryDumper;
 
-use Neos\ContentRepository\Domain\Projection\Content\TraversableNodeInterface;
+use Neos\ContentRepository\Domain\Model\Node;
 use Neos\ContentRepository\Domain\Service\ContentDimensionCombinator;
 use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\Flow\Annotations as Flow;
@@ -44,17 +44,19 @@ final class Exporter
         $context = $this->contextFactory->create([
             'currentSite' => $site,
             'dimensions' => $dimensions,
+            'invisibleContentShown' => true,
+            'inaccessibleContentShown' => true,
         ]);
         $siteNode = $context->getNode('/sites/' . $site->getNodeName());
-        if (!$siteNode instanceof TraversableNodeInterface) {
+        if (!$siteNode instanceof Node) {
             throw new \RuntimeException(sprintf('Failed to find site node for site name "%s" in dimension %s', $site->getNodeName(), json_encode($dimensions)));
         }
         return new DumpedNodes($this->exportNodes($siteNode, 0));
     }
 
-    private function exportNodes(TraversableNodeInterface $node, int $level): \Generator
+    private function exportNodes(Node $node, int $level): \Generator
     {
-        yield new DumpedNode((string)$node->getNodeAggregateIdentifier(), (string)$node->getNodeName(), $level);
+        yield new DumpedNode((string)$node->getNodeAggregateIdentifier(), (string)$node->getNodeName(), $node->isTethered(), $node->isHidden(), $level);
         foreach ($node->findChildNodes() as $childNode) {
             yield from $this->exportNodes($childNode, $level + 1);
         }
