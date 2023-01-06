@@ -5,7 +5,8 @@
     "license": "MIT",
     "require": {
         "ext-intl": "*",
-        "neos/content-repository": "^9"
+        "neos/content-repository": "^9",
+        "sebastian/diff": "^4"
     },
     "require-dev": {
         "roave/security-advisories": "dev-latest"

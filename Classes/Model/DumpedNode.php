@@ -11,6 +11,8 @@ final class DumpedNode
     public function __construct(
         public readonly string $id,
         public readonly ?string $name,
+        public readonly bool $isTethered,
+        public readonly bool $isHidden,
         public readonly int $level,
     ) {}
 
