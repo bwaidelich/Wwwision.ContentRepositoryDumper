@@ -57,7 +57,24 @@ final class Exporter
     private function exportNodes(Node $node, int $level): \Generator
     {
         yield new DumpedNode((string)$node->getNodeAggregateIdentifier(), (string)$node->getNodeName(), $node->isTethered(), $node->isHidden(), $level);
+
+        // NOTE: findChildNodes() returns the nodes ordered by their sortingIndex. In Neos < 9 it can happen that
+        // two nodes have the same sorting index (and parent node and dimensions).
+        // In order to achieve a deterministic ordering nevertheless, we sort nodes with the same index by their name:
+        $nodesOnThisLevel = [];
         foreach ($node->findChildNodes() as $childNode) {
+            $nodesOnThisLevel[] = $childNode;
+        }
+        usort($nodesOnThisLevel, static function (Node $node1, Node $node2) {
+            $index1 = $node1->getNodeData()->getIndex();
+            $index2 = $node2->getNodeData()->getIndex();
+            if ($index1 === $index2) {
+                return (string)$node1->getNodeName() <=> (string)$node2->getNodeName();
+            }
+            return $index1 <=> $index2;
+        });
+
+        foreach ($nodesOnThisLevel as $childNode) {
             yield from $this->exportNodes($childNode, $level + 1);
         }
     }
